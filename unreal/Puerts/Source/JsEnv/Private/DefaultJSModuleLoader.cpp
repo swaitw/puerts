@@ -16,7 +16,7 @@
 #include "HAL/PlatformFilemanager.h"
 #endif
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 static FString PathNormalize(const FString& PathIn)
 {
@@ -69,18 +69,17 @@ bool DefaultJSModuleLoader::SearchModuleInDir(
 {
     FString Extension = FPaths::GetExtension(RequiredModule);
     bool IsJs = Extension == TEXT("js") || Extension == TEXT("mjs") || Extension == TEXT("cjs") || Extension == TEXT("json");
-    if (Extension == TEXT("") || !IsJs)
-    {
-        return SearchModuleWithExtInDir(Dir, RequiredModule + ".js", Path, AbsolutePath) ||
-               SearchModuleWithExtInDir(Dir, RequiredModule + ".mjs", Path, AbsolutePath) ||
-               SearchModuleWithExtInDir(Dir, RequiredModule + ".cjs", Path, AbsolutePath) ||
-               SearchModuleWithExtInDir(Dir, RequiredModule / "package.json", Path, AbsolutePath) ||
-               SearchModuleWithExtInDir(Dir, RequiredModule / "index.js", Path, AbsolutePath);
-    }
-    else
-    {
-        return SearchModuleWithExtInDir(Dir, RequiredModule, Path, AbsolutePath);
-    }
+    if (IsJs && SearchModuleWithExtInDir(Dir, RequiredModule, Path, AbsolutePath))
+        return true;
+    return SearchModuleWithExtInDir(Dir, RequiredModule + ".js", Path, AbsolutePath) ||
+           SearchModuleWithExtInDir(Dir, RequiredModule + ".mjs", Path, AbsolutePath) ||
+           SearchModuleWithExtInDir(Dir, RequiredModule + ".cjs", Path, AbsolutePath) ||
+#if defined(WITH_V8_BYTECODE)
+           SearchModuleWithExtInDir(Dir, RequiredModule + ".mbc", Path, AbsolutePath) ||
+           SearchModuleWithExtInDir(Dir, RequiredModule + ".cbc", Path, AbsolutePath) ||
+#endif
+           SearchModuleWithExtInDir(Dir, RequiredModule / "package.json", Path, AbsolutePath) ||
+           SearchModuleWithExtInDir(Dir, RequiredModule / "index.js", Path, AbsolutePath);
 }
 
 bool DefaultJSModuleLoader::SearchModuleWithExtInDir(
@@ -144,4 +143,4 @@ FString& DefaultJSModuleLoader::GetScriptRoot()
     return ScriptRoot;
 }
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

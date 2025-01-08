@@ -79,6 +79,9 @@ public:
     UPROPERTY()
     bool HasConstructor;
 
+    // Record the variable's location in the .ts file.
+    int32 VariableIndexInTS = 0;
+
     UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
     static bool Existed(const FString& InName, const FString& InPath);
 
@@ -137,6 +140,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
     void RemoveNotExistedFunction();
 
+    void RemoveComponent(FName ComponentName);
+
+    void SetupAttachment(FName InComponentName, FName InParentComponentName);
+
+    UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
+    void SetupAttachments(TMap<FName, FName> InAttachments);
+
     UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
     void AddMemberVariable(FName NewVarName, FPEGraphPinType InGraphPinType, FPEGraphTerminalType InPinValueType, int32 InLFlags,
         int32 InHFlags, int32 InLifetimeCondition);
@@ -159,9 +169,14 @@ public:
     void RemoveNotExistedMemberVariable();
 
     UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
+    void RemoveNotExistedComponent();
+
+    UFUNCTION(BlueprintCallable, Category = "PEBlueprintAsset")
     void Save();
 
 private:
+    TSet<FName> ComponentsAdded;
+
     TSet<FName> MemberVariableAdded;
 
     TSet<FName> FunctionAdded;

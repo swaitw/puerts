@@ -15,12 +15,16 @@
 #include "PropertyTranslator.h"
 #include "FunctionTranslator.h"
 
+#include "NamespaceDef.h"
+
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #pragma warning(push, 0)
 #include "libplatform/libplatform.h"
 #include "v8.h"
 #pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 class FDelegateWrapper
 {
@@ -55,4 +59,4 @@ private:
 
     static void Broadcast(const v8::FunctionCallbackInfo<v8::Value>& Info);
 };
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

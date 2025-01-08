@@ -64,6 +64,7 @@ struct DECLARATIONGENERATOR_API FTypeScriptDeclarationGenerator
         FString FileVersionString;
         bool IsExist;
         bool Changed;
+        bool IsAssociation;
     };
 
     TMap<FName, BlueprintTypeDeclInfo> BlueprintTypeDeclInfoCache;
@@ -72,9 +73,9 @@ struct DECLARATIONGENERATOR_API FTypeScriptDeclarationGenerator
 
     bool RefFromOuter = false;
 
-    const FString& GetNamespace(UObject* Obj);
+    bool BeginGenAssetData = false;
 
-    bool PathIsValid(UObject* Obj);
+    const FString& GetNamespace(UObject* Obj);
 
     FString GetNameWithNamespace(UObject* Obj);
 
@@ -84,9 +85,9 @@ struct DECLARATIONGENERATOR_API FTypeScriptDeclarationGenerator
 
     void WriteOutput(UObject* Obj, const FStringBuffer& Buff);
 
-    void RestoreBlueprintTypeDeclInfos();
+    void RestoreBlueprintTypeDeclInfos(bool InGenFull);
 
-    void RestoreBlueprintTypeDeclInfos(const FString& FileContent);
+    void RestoreBlueprintTypeDeclInfos(const FString& FileContent, bool InGenFull);
 
     void LoadAllWidgetBlueprint(FName InSearchPath, bool InGenFull);
 

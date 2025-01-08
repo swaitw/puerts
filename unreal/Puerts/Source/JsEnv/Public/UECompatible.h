@@ -8,16 +8,20 @@
 
 #pragma once
 
+#include "Runtime/Launch/Resources/Version.h"
 #include "CoreMinimal.h"
+#include "UObject/Object.h"
+#include "UObject/UObjectIterator.h"
+#include "PuertsNamespaceDef.h"
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 FORCEINLINE bool UEObjectIsPendingKill(const UObject* Test)
 {
 #if ENGINE_MAJOR_VERSION > 4
-    return !IsValid(Test);
+    return !IsValid(Test) || Test->IsUnreachable();
 #else
-    return Test->IsPendingKill();
+    return Test->IsPendingKillOrUnreachable();
 #endif
 }
 
@@ -34,4 +38,21 @@ typedef FThreadSafeObjectIterator FUEObjectIterator;
 #else
 typedef FObjectIterator FUEObjectIterator;
 #endif
-}    // namespace puerts
+
+template <typename T>
+T* FindAnyType(const TCHAR* InShortName)
+{
+#if (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 1) || ENGINE_MAJOR_VERSION > 5
+    return FindFirstObject<T>(
+        InShortName, EFindFirstObjectOptions::EnsureIfAmbiguous | EFindFirstObjectOptions::NativeFirst, ELogVerbosity::Error);
+#else
+    return FindObject<T>(ANY_PACKAGE, InShortName);
+#endif
+}
+
+template <typename T>
+T* FindAnyType(const FString& InShortName)
+{
+    return FindAnyType<T>(*InShortName);
+}
+}    // namespace PUERTS_NAMESPACE

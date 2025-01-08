@@ -118,6 +118,8 @@ sudo xattr -r -d com.apple.quarantine *.dylib
 
 不支持的版本：（高于）4.8.3
 
+若未开启继承ue类功能，则不需要类似继承模式那样要用typescript库去分析语法，因此没有上述的typescript版本特定要求
+
 ## ue_bp.d.ts报错，重新生成无效
 
 蓝图声明文件默认增量生成（文件不发生变化不生成），有时其依赖的类型发生了变化，或者被版本管理工具修改，此时可以试试全量生成，控>制台执行`Puerts.Gen FULL`
@@ -132,3 +134,17 @@ sudo xattr -r -d com.apple.quarantine *.dylib
 
 * 可以尝试在命令行单独编译该ts文件，输入编译命令`puerts compile e9050088932a23f720713a9a5073986e`触发该文件的编译（其中e9050088932a23f720713a9a5073986e是`puerts ls TsTestActor`返回的id），如果有编译错误就解决，没有编译错误正常能生成相应的代理蓝图。
 
+## 生成的ue_bp.d.ts报语法错误
+
+这一般是蓝图的路径，字段，参数名等含ts不支持的字符所致，解决办法：
+
+* 如果这种蓝图的量比较小，可以加入到黑名单（项目配置->Puerts）。
+
+* 如果这种蓝图数量比较大，可以把需要在代码访问的、合法的蓝图放入一个目录，然后在编辑器控制台下输入命令来生成，这种方式可以指定蓝图搜索的路径，比如 ·Puerts.Gen PATH=/Game/StarterContent· 只会搜索"Content\StarterContent"目录。
+
+## 概率报Maximum call stack size exceeded
+
+注意是概率报，不是必报，这种情况通常是因为多线程访问了FJsEnv，可以尝试在JsEnv.Build.cs中加入THREAD_SAFE宏看能否解决。
+
+ps：以上是v8后端的的现象和解决方案，qjs后端如果多线程访问有可能会抛个没有文件信息的异常`<unknow>:-1`，而且qjs后端目前不支持多线程
+ps：如果是必报，应该是js代码中有递归死循环了。

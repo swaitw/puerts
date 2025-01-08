@@ -11,7 +11,11 @@
 #include "ObjectMapper.h"
 #include "StructWrapper.h"
 #if !defined(ENGINE_INDEPENDENT_JSENV)
+#if (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5)
+#include "StructUtils/UserDefinedStruct.h"
+#else
 #include "Engine/UserDefinedStruct.h"
+#endif
 #endif
 #include "ArrayBuffer.h"
 #include "ContainerWrapper.h"
@@ -20,7 +24,7 @@
 #include "TypeInfo.hpp"
 #endif
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 void FPropertyTranslator::Getter(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
@@ -34,7 +38,7 @@ void FPropertyTranslator::Getter(const v8::FunctionCallbackInfo<v8::Value>& Info
 void FPropertyTranslator::Getter(
     v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
-    if (!PropertyWeakPtr.IsValid())
+    if (!IsPropertyValid())
     {
         FV8Utils::ThrowException(Isolate, "Property is invalid!");
         return;
@@ -86,7 +90,7 @@ void FPropertyTranslator::Setter(const v8::FunctionCallbackInfo<v8::Value>& Info
 void FPropertyTranslator::Setter(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, v8::Local<v8::Value> Value,
     const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
-    if (!PropertyWeakPtr.IsValid())
+    if (!IsPropertyValid())
     {
         FV8Utils::ThrowException(Isolate, "Property is invalid!");
         return;
@@ -129,7 +133,7 @@ void FPropertyTranslator::DelegateGetter(const v8::FunctionCallbackInfo<v8::Valu
 
     FPropertyTranslator* PropertyTranslator =
         static_cast<FPropertyTranslator*>((v8::Local<v8::External>::Cast(Info.Data()))->Value());
-    if (!PropertyTranslator->PropertyWeakPtr.IsValid())
+    if (!PropertyTranslator->IsPropertyValid())
     {
         FV8Utils::ThrowException(Isolate, "Property is invalid!");
         return;
@@ -174,16 +178,22 @@ void FPropertyTranslator::SetAccessor(v8::Isolate* Isolate, v8::Local<v8::Functi
         auto GetterTemplate = v8::FunctionTemplate::New(Isolate, Getter, Self);
         auto SetterTemplate = v8::FunctionTemplate::New(Isolate, Setter, Self);
 #if !defined(ENGINE_INDEPENDENT_JSENV)
-        Template->PrototypeTemplate()->SetAccessorProperty(
-            FV8Utils::InternalString(Isolate, OwnerStruct && OwnerStruct->IsA<UUserDefinedStruct>() ?
+        FString PropertyName = OwnerStruct && OwnerStruct->IsA<UUserDefinedStruct>() ?
 #if ENGINE_MINOR_VERSION >= 23 || ENGINE_MAJOR_VERSION > 4
-                                                                                                    Property->GetAuthoredName()
+                                                                                     Property->GetAuthoredName()
 #else
-                                                                                                    Property->GetDisplayNameText()
-                                                                                                        .ToString()
+                                                                                     Property->GetDisplayNameText().ToString()
 #endif
-                                                                                                    : Property->GetName()),
-            GetterTemplate, SetterTemplate, v8::DontDelete);
+                                                                                     : Property->GetName();
+#ifdef PUERTS_WITH_EDITOR_SUFFIX
+        if (Property->IsEditorOnlyProperty())
+        {
+            PropertyName += EditorOnlyPropertySuffix;
+        }
+#endif
+
+        Template->PrototypeTemplate()->SetAccessorProperty(
+            FV8Utils::InternalString(Isolate, PropertyName), GetterTemplate, SetterTemplate, v8::DontDelete);
 #else
         Template->PrototypeTemplate()->SetAccessorProperty(
             FV8Utils::InternalString(Isolate, Property->GetName()), GetterTemplate, SetterTemplate, v8::DontDelete);
@@ -405,21 +415,13 @@ public:
         if (Value->IsArrayBuffer())
         {
             auto Ab = v8::Local<v8::ArrayBuffer>::Cast(Value);
-#if defined(HAS_ARRAYBUFFER_NEW_WITHOUT_STL)
             size_t ByteLength;
-            auto Data = v8::ArrayBuffer_Get_Data(Ab, ByteLength);
+            auto Data = DataTransfer::GetArrayBufferData(Ab, ByteLength);
             if (ByteLength == sizeof(FName))
             {
                 NameProperty->SetPropertyValue(ValuePtr, *static_cast<FName*>(Data));
                 return true;
             }
-#else
-            if (Ab->GetContents().ByteLength() == sizeof(FName))
-            {
-                NameProperty->SetPropertyValue(ValuePtr, *static_cast<FName*>(Ab->GetContents().Data()));
-                return true;
-            }
-#endif
         }
         NameProperty->SetPropertyValue(ValuePtr, FV8Utils::ToFName(Isolate, Value));
         return true;
@@ -439,7 +441,7 @@ public:
 #ifndef PUERTS_FTEXT_AS_OBJECT
         return FV8Utils::ToV8String(Isolate, TextProperty->GetPropertyValue(ValuePtr));
 #else
-        return DataTransfer::FindOrAddCData(Context->GetIsolate(), Context, puerts::StaticTypeId<FText>::get(),
+        return DataTransfer::FindOrAddCData(Context->GetIsolate(), Context, StaticTypeId<FText>::get(),
             PassByPointer ? ValuePtr : new FText(TextProperty->GetPropertyValue(ValuePtr)), PassByPointer);
 #endif
     }
@@ -554,6 +556,40 @@ public:
         return true;
     }
 };
+
+#if ENGINE_MINOR_VERSION >= 25 || ENGINE_MAJOR_VERSION > 4
+class FFieldPathPropertyTranslator : public FPropertyWithDestructorReflection
+{
+public:
+    explicit FFieldPathPropertyTranslator(PropertyMacro* InProperty) : FPropertyWithDestructorReflection(InProperty)
+    {
+    }
+
+    v8::Local<v8::Value> UEToJs(
+        v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const void* ValuePtr, bool PassByPointer) const override
+    {
+        return FV8Utils::ToV8String(Isolate, FieldPathProperty->GetPropertyValuePtr(ValuePtr)->ToString());
+    }
+
+    bool JsToUE(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::Local<v8::Value>& Value, void* ValuePtr,
+        bool DeepCopy) const override
+    {
+        auto Path = FV8Utils::ToFString(Isolate, Value);
+        FFieldPath FieldPath;
+        FieldPath.Generate(*Path);
+
+        if (!FieldPath.GetTyped(FieldPathProperty->PropertyClass))
+        {
+            FV8Utils::ThrowException(Isolate, FString::Printf(TEXT("invalid FieldPath: %s"), *Path));
+            return false;
+        }
+
+        FieldPathProperty->SetPropertyValue(ValuePtr, FieldPath);
+
+        return true;
+    }
+};
+#endif
 
 #ifdef GetObject
 #undef GetObject
@@ -681,21 +717,13 @@ public:
         if (ArrayBuffer->bCopy)
         {
             v8::Local<v8::ArrayBuffer> Ab = v8::ArrayBuffer::New(Isolate, ArrayBuffer->Length);
-#if defined(HAS_ARRAYBUFFER_NEW_WITHOUT_STL)
-            void* Buff = static_cast<char*>(v8::ArrayBuffer_Get_Data(Ab));
-#else
-            void* Buff = Ab->GetContents().Data();
-#endif
+            void* Buff = static_cast<char*>(DataTransfer::GetArrayBufferData(Ab));
             ::memcpy(Buff, ArrayBuffer->Data, ArrayBuffer->Length);
             return Ab;
         }
         else
         {
-#if defined(HAS_ARRAYBUFFER_NEW_WITHOUT_STL)
-            return v8::ArrayBuffer_New_Without_Stl(Isolate, ArrayBuffer->Data, ArrayBuffer->Length);
-#else
-            return v8::ArrayBuffer::New(Isolate, ArrayBuffer->Data, ArrayBuffer->Length);
-#endif
+            return DataTransfer::NewArrayBuffer(Context, ArrayBuffer->Data, ArrayBuffer->Length);
         }
     }
 
@@ -707,27 +735,70 @@ public:
         {
             v8::Local<v8::ArrayBufferView> BuffView = Value.As<v8::ArrayBufferView>();
             auto Ab = BuffView->Buffer();
-#if defined(HAS_ARRAYBUFFER_NEW_WITHOUT_STL)
-            ArrayBuffer.Data = static_cast<char*>(v8::ArrayBuffer_Get_Data(Ab)) + BuffView->ByteOffset();
-#else
-            ArrayBuffer.Data = static_cast<char*>(Ab->GetContents().Data()) + BuffView->ByteOffset();
-#endif
+            ArrayBuffer.Data = static_cast<char*>(DataTransfer::GetArrayBufferData(Ab)) + BuffView->ByteOffset();
             ArrayBuffer.Length = BuffView->ByteLength();
         }
         else if (Value->IsArrayBuffer())
         {
             auto Ab = v8::Local<v8::ArrayBuffer>::Cast(Value);
-#if defined(HAS_ARRAYBUFFER_NEW_WITHOUT_STL)
             size_t ByteLength;
-            ArrayBuffer.Data = v8::ArrayBuffer_Get_Data(Ab, ByteLength);
+            ArrayBuffer.Data = DataTransfer::GetArrayBufferData(Ab, ByteLength);
             ArrayBuffer.Length = ByteLength;
-#else
-            ArrayBuffer.Data = Ab->GetContents().Data();
-            ArrayBuffer.Length = Ab->GetContents().ByteLength();
-#endif
         }
 
         StructProperty->CopySingleValue(ValuePtr, &ArrayBuffer);
+
+        return true;
+    }
+};
+
+class FArrayBufferValuePropertyTranslator : public FPropertyWithDestructorReflection
+{
+public:
+    explicit FArrayBufferValuePropertyTranslator(PropertyMacro* InProperty) : FPropertyWithDestructorReflection(InProperty)
+    {
+    }
+
+    v8::Local<v8::Value> UEToJs(
+        v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const void* ValuePtr, bool PassByPointer) const override
+    {
+        void* Ptr = const_cast<void*>(ValuePtr);
+
+        FArrayBufferValue* ArrayBuffer = static_cast<FArrayBufferValue*>(Ptr);
+        v8::Local<v8::ArrayBuffer> Ab = v8::ArrayBuffer::New(Isolate, ArrayBuffer->Data.Num());
+        void* Buff = static_cast<char*>(DataTransfer::GetArrayBufferData(Ab));
+        ::memcpy(Buff, ArrayBuffer->Data.GetData(), ArrayBuffer->Data.Num());
+        return Ab;
+    }
+
+    bool JsToUE(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::Local<v8::Value>& Value, void* ValuePtr,
+        bool DeepCopy) const override
+    {
+        FArrayBufferValue* ArrayBuffer = static_cast<FArrayBufferValue*>(ValuePtr);
+        size_t Len = 0;
+        char* Data = nullptr;
+        if (Value->IsArrayBufferView())
+        {
+            v8::Local<v8::ArrayBufferView> BuffView = Value.As<v8::ArrayBufferView>();
+            auto Ab = BuffView->Buffer();
+            Data = static_cast<char*>(DataTransfer::GetArrayBufferData(Ab)) + BuffView->ByteOffset();
+            Len = BuffView->ByteLength();
+        }
+        else if (Value->IsArrayBuffer())
+        {
+            auto Ab = v8::Local<v8::ArrayBuffer>::Cast(Value);
+            Data = static_cast<char*>(DataTransfer::GetArrayBufferData(Ab, Len));
+        }
+
+        if (Len > 0 && Data)
+        {
+            ArrayBuffer->Data.AddUninitialized(Len);
+            ::memcpy(ArrayBuffer->Data.GetData(), Data, Len);
+        }
+        else
+        {
+            ArrayBuffer->Data.Reset();
+        }
 
         return true;
     }
@@ -1019,8 +1090,8 @@ public:
         FScriptDelegate* Des = DelegateProperty->GetPropertyValuePtr(ValuePtr);
         if (Value->IsFunction())
         {
-            *Des = FV8Utils::IsolateData<IObjectMapper>(Isolate)->NewManualReleaseDelegate(
-                Isolate, Context, Value.As<v8::Function>(), DelegateProperty->SignatureFunction);
+            *Des = FV8Utils::IsolateData<IObjectMapper>(Isolate)->NewDelegate(
+                Isolate, Context, nullptr, Value.As<v8::Function>(), DelegateProperty->SignatureFunction);
         }
         else
         {
@@ -1041,12 +1112,17 @@ public:
                         return false;
                     }
 
-                    auto FuncName = Array->Get(Context, 1).ToLocalChecked();
-                    if (FuncName->IsString())
+                    auto Func = Array->Get(Context, 1).ToLocalChecked();
+                    if (Func->IsString())
                     {
                         FScriptDelegate Delegate;
-                        Delegate.BindUFunction(Obj, *FV8Utils::ToFString(Isolate, FuncName));
+                        Delegate.BindUFunction(Obj, *FV8Utils::ToFString(Isolate, Func));
                         *Des = Delegate;
+                    }
+                    else if (Func->IsFunction())
+                    {
+                        *Des = FV8Utils::IsolateData<IObjectMapper>(Isolate)->NewDelegate(
+                            Isolate, Context, Obj, Func.As<v8::Function>(), DelegateProperty->SignatureFunction);
                     }
                 }
             }
@@ -1216,6 +1292,10 @@ struct PropertyTranslatorCreator
             {
                 return Creator<FArrayBufferPropertyTranslator>::Do(InProperty, IgnoreOut, Ptr);
             }
+            else if (StructProperty->Struct == FArrayBufferValue::StaticStruct())
+            {
+                return Creator<FArrayBufferValuePropertyTranslator>::Do(InProperty, IgnoreOut, Ptr);
+            }
             else if (StructProperty->Struct == FJsObject::StaticStruct())
             {
                 return Creator<FJsObjectPropertyTranslator>::Do(InProperty, IgnoreOut, Ptr);
@@ -1254,6 +1334,12 @@ struct PropertyTranslatorCreator
         {
             return Creator<DoNothingPropertyTranslator>::Do(InProperty, IgnoreOut, Ptr);    //统一在别的地方处理
         }
+#if ENGINE_MINOR_VERSION >= 25 || ENGINE_MAJOR_VERSION > 4
+        else if (InProperty->IsA<FFieldPathProperty>())
+        {
+            return Creator<FFieldPathPropertyTranslator>::Do(InProperty, IgnoreOut, Ptr);
+        }
+#endif
         else
         {
             return Creator<DoNothingPropertyTranslator>::Do(InProperty, IgnoreOut,
@@ -1337,4 +1423,4 @@ void FPropertyTranslator::CreateOn(PropertyMacro* InProperty, FPropertyTranslato
     PropertyTranslatorCreator<PlacementNewCreator, FPropertyTranslator*>::Do(InProperty, true, InOldProperty);
 }
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

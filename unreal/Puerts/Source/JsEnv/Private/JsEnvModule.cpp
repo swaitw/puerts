@@ -9,12 +9,19 @@
 #include "JsEnvModule.h"
 //#include "TGameJSCorePCH.h"
 #include "HAL/MemoryBase.h"
+#include "NamespaceDef.h"
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #if defined(WITH_NODEJS)
 #pragma warning(push, 0)
 #include "node.h"
 #include "uv.h"
 #pragma warning(pop)
 #endif
+#pragma warning(push, 0)
+#include "v8.h"
+#include "libplatform/libplatform.h"
+#pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
 class FMallocWrapper final : public FMalloc
 {
@@ -137,13 +144,6 @@ public:
     }
 };
 
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
-#pragma warning(push, 0)
-#include "v8.h"
-#include "libplatform/libplatform.h"
-#pragma warning(pop)
-#endif
-
 DEFINE_LOG_CATEGORY_STATIC(JsEnvModule, Log, All);
 
 class FJsEnvModule : public IJsEnvModule
@@ -154,11 +154,13 @@ class FJsEnvModule : public IJsEnvModule
 
     FMallocWrapper* MallocWrapper = nullptr;
 
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
 public:
     void* GetV8Platform() override;
 
 private:
+#if defined(V8_HAS_WRAP_API_WITHOUT_STL)
+    v8::Platform* platform_;
+#else
     std::unique_ptr<v8::Platform> platform_;
 #endif
 };
@@ -177,15 +179,49 @@ void FJsEnvModule::StartupModule()
     delete[] Dummy;
 
     // This code will execute after your module is loaded into memory (but after global variables are initialized, of course.)
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
 #if defined(WITH_NODEJS)
     platform_ = node::MultiIsolatePlatform::Create(4);
 #else
+#if defined(V8_HAS_WRAP_API_WITHOUT_STL)
+#if defined(USING_SINGLE_THREAD_PLATFORM)
+    platform_ = v8::platform::NewSingleThreadedDefaultPlatform_Without_Stl();
+#else
+    platform_ = v8::platform::NewDefaultPlatform_Without_Stl();
+#endif
+#else
+#if defined(USING_SINGLE_THREAD_PLATFORM)
+    platform_ = v8::platform::NewSingleThreadedDefaultPlatform();
+#else
     platform_ = v8::platform::NewDefaultPlatform();
 #endif
-    v8::V8::InitializePlatform(platform_.get());
-    v8::V8::Initialize();
 #endif
+#endif
+
+#if PLATFORM_IOS
+    v8::V8::SetFlagsFromString("--jitless --no-expose-wasm");
+#endif
+
+#ifdef WITH_V8_FAST_CALL
+    v8::V8::SetFlagsFromString("--turbo-fast-api-calls");
+#endif
+
+#if defined(USING_SINGLE_THREAD_PLATFORM)
+    v8::V8::SetFlagsFromString("--single-threaded");
+#endif
+
+#if defined(WITH_V8_BYTECODE)
+    v8::V8::SetFlagsFromString("--no-lazy --no-flush-bytecode --no-enable-lazy-source-positions");
+#endif
+
+    // v8::V8::SetFlagsFromString("--expose-gc");
+    // v8::V8::SetFlagsFromString("--no-freeze-flags-after-init");
+
+#if defined(V8_HAS_WRAP_API_WITHOUT_STL)
+    v8::V8::InitializePlatform(platform_);
+#else
+    v8::V8::InitializePlatform(platform_.get());
+#endif
+    v8::V8::Initialize();
 
 #if defined(WITH_NODEJS)
     int Argc = 1;
@@ -207,9 +243,15 @@ void FJsEnvModule::ShutdownModule()
 {
     // This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
     // we call this function before unloading the module.
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
     v8::V8::Dispose();
+#if V8_MAJOR_VERSION > 9
+    v8::V8::DisposePlatform();
+#else
     v8::V8::ShutdownPlatform();
+#endif
+
+#if defined(V8_HAS_WRAP_API_WITHOUT_STL)
+    v8::platform::DeletePlatform_Without_Stl(platform_);
 #endif
 
     if (MallocWrapper && MallocWrapper == GMalloc)
@@ -221,9 +263,11 @@ void FJsEnvModule::ShutdownModule()
     }
 }
 
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
 void* FJsEnvModule::GetV8Platform()
 {
+#if defined(V8_HAS_WRAP_API_WITHOUT_STL)
+    return reinterpret_cast<void*>(platform_);
+#else
     return reinterpret_cast<void*>(platform_.get());
-}
 #endif
+}
