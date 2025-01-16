@@ -14,6 +14,8 @@
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Templates/Function.h"
 #include "Templates/SharedPointer.h"
+#include "Runtime/CoreUObject/Public/UObject/Package.h"
+
 #include "TypeScriptGeneratedClass.generated.h"
 
 struct PendingConstructJobInfo
@@ -31,15 +33,13 @@ class JSENV_API UTypeScriptGeneratedClass : public UBlueprintGeneratedClass
     GENERATED_BODY()
 
 public:
-    TWeakPtr<puerts::ITsDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
+    TWeakPtr<PUERTS_NAMESPACE::ITsDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
 
     TSet<FName> FunctionToRedirect;
 
-    FCriticalSection PendingConstructJobMutex;
+    bool RedirectedToTypeScript = false;
 
-    TArray<PendingConstructJobInfo> PendingConstructInfos;
-
-    bool IsProcessingPendingConstructJob = false;
+    TMap<FName, FNativeFuncPtr> TempNativeFuncStorage;
 
 #if WITH_EDITOR
     bool NeedReBind = true;
@@ -50,8 +50,6 @@ public:
 #endif
 
     DECLARE_FUNCTION(execLazyLoadCallJS);
-
-    void ProcessPendingConstructJob();
 
     static void StaticConstructor(const FObjectInitializer& ObjectInitializer);
 
@@ -66,6 +64,8 @@ public:
     void CancelRedirection();
 
     bool NotSupportInject();
+
+    void RestoreNativeFunc();
 
     UPROPERTY()
     bool HasConstructor;

@@ -13,66 +13,64 @@
 #include <mutex>
 #include <string>
 #include <memory>
-
-#pragma warning(push, 0)  
-#include "libplatform/libplatform.h"
-#include "v8.h"
-#pragma warning(pop)
+#include "Common.h"
 
 #include "JSFunction.h"
 #include "V8InspectorImpl.h"
+#include "BackendEnv.h"
+#ifdef MULT_BACKENDS
+#include "IPuertsPlugin.h"
+#endif
+#ifdef WITH_IL2CPP_OPTIMIZATION
+#include "pesapi.h"
+#include "CppObjectMapper.h"
+#include "DataTransfer.h"
+#endif
 
 #if WITH_NODEJS
 #pragma warning(push, 0)
 #include "node.h"
 #include "uv.h"
 #pragma warning(pop)
-#else
-
-#if defined(PLATFORM_WINDOWS)
-
-#if _WIN64
-#include "Blob/Win64/SnapshotBlob.h"
-#else
-#include "Blob/Win32/SnapshotBlob.h"
-#endif
-
-#elif defined(PLATFORM_ANDROID_ARM)
-#include "Blob/Android/armv7a/SnapshotBlob.h"
-#elif defined(PLATFORM_ANDROID_ARM64)
-#include "Blob/Android/arm64/SnapshotBlob.h"
-#elif defined(PLATFORM_ANDROID_x64)
-#include "Blob/Android/x64/SnapshotBlob.h"
-#elif defined(PLATFORM_MAC_ARM64)
-#include "Blob/macOS_arm64/SnapshotBlob.h"
-#elif defined(PLATFORM_MAC)
-#include "Blob/macOS/SnapshotBlob.h"
-#elif defined(PLATFORM_IOS)
-#include "Blob/iOS/arm64/SnapshotBlob.h"
-#elif defined(PLATFORM_IOS_SIMULATOR)
-#include "Blob/iOS/x64/SnapshotBlob.h"
-#elif defined(PLATFORM_LINUX)
-#include "Blob/Linux/SnapshotBlob.h"
-#endif
 
 #endif
 
+namespace PUERTS_NAMESPACE
+{
 typedef char* (*CSharpModuleResolveCallback)(const char* identifer, int32_t jsEnvIdx, char*& pathForDebug);
 
+#ifdef MULT_BACKENDS
+typedef void(*CSharpFunctionCallback)(puerts::IPuertsPlugin* plugin, const v8::FunctionCallbackInfo<v8::Value>& Info, void* Self, int ParamLen, int64_t UserData);
+
+typedef void* (*CSharpConstructorCallback)(puerts::IPuertsPlugin* plugin, const v8::FunctionCallbackInfo<v8::Value>& Info, int ParamLen, int64_t UserData);
+
+typedef void (*JsFunctionFinalizeCallback)(puerts::IPuertsPlugin* plugin, int64_t UserData);
+#else
 typedef void(*CSharpFunctionCallback)(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, void* Self, int ParamLen, int64_t UserData);
 
 typedef void* (*CSharpConstructorCallback)(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, int ParamLen, int64_t UserData);
 
+typedef void (*JsFunctionFinalizeCallback)(v8::Isolate* Isolate, int64_t UserData);
+#endif
+
 typedef void(*CSharpDestructorCallback)(void* Self, int64_t UserData);
 
-namespace puerts
-{
 struct FCallbackInfo
 {
     FCallbackInfo(bool InIsStatic, CSharpFunctionCallback InCallback, int64_t InData) : IsStatic(InIsStatic), Callback(InCallback), Data(InData) {}
     bool IsStatic;
     CSharpFunctionCallback Callback;
     int64_t Data;
+};
+
+struct FCallbackInfoWithFinalize : public FCallbackInfo
+{
+    FCallbackInfoWithFinalize(bool InIsStatic, CSharpFunctionCallback InCallback, int64_t InData, JsFunctionFinalizeCallback InFinalize, class JSEngine* InJSE)
+       : FCallbackInfo(InIsStatic, InCallback, InData), Finalize(InFinalize), JSE(InJSE)
+    {}
+    JsFunctionFinalizeCallback Finalize;
+    class JSEngine* JSE;
+    v8::Global<v8::Function> JsFunction;
 };
 
 struct FLifeCycleInfo
@@ -86,13 +84,6 @@ struct FLifeCycleInfo
     int Size;
 };
 
-static std::unique_ptr<v8::Platform> GPlatform;
-#if defined(WITH_NODEJS)
-static std::vector<std::string>* Args;
-static std::vector<std::string>* ExecArgs;
-static std::vector<std::string>* Errors;
-#endif
-
 v8::Local<v8::ArrayBuffer> NewArrayBuffer(v8::Isolate* Isolate, void *Ptr, size_t Size);
 
 enum JSEngineBackend
@@ -105,20 +96,20 @@ enum JSEngineBackend
 class JSEngine
 {
 private: 
-    void JSEngineWithNode();
-    void JSEngineWithoutNode(void* external_quickjs_runtime, void* external_quickjs_context);
 #if !WITH_QUICKJS
     static void HostInitializeImportMetaObject(v8::Local<v8::Context> context, v8::Local<v8::Module> module, v8::Local<v8::Object> meta);
 #endif
 public:
+#ifdef MULT_BACKENDS
+    JSEngine(puerts::IPuertsPlugin* InPuertsPlugin, void* external_quickjs_runtime, void* external_quickjs_context);
+#else
     JSEngine(void* external_quickjs_runtime, void* external_quickjs_context);
+#endif
 
     ~JSEngine();
 
     void SetGlobalFunction(const char *Name, CSharpFunctionCallback Callback, int64_t Data);
 
-    bool ExecuteModule(const char* Path, const char* Exportee);
-        
     bool Eval(const char *Code, const char* Path);
 
     int RegisterClass(const char *FullName, int BaseTypeId, CSharpConstructorCallback Constructor, CSharpDestructorCallback Destructor, int64_t Data, int Size);
@@ -165,8 +156,12 @@ public:
     bool InspectorTick();
 
     void LogicTick();
+    
+    static void CallbackDataGarbageCollected(const v8::WeakCallbackInfo<FCallbackInfoWithFinalize>& Data);
 
     v8::Isolate* MainIsolate;
+
+    bool ClearModuleCache(const char* Path);
 
     std::vector<char> StrBuffer;
 
@@ -180,31 +175,13 @@ public:
     }
 
     int32_t Idx;
-    
-    CSharpModuleResolveCallback ModuleResolver;
-#if defined(WITH_QUICKJS)
-    std::map<std::string, JSModuleDef*> PathToModuleMap;
-#else
-    std::map<std::string, v8::UniquePersistent<v8::Module>> PathToModuleMap;
-#endif
 
-    std::map<int, std::string> ScriptIdToPathMap;
+    FBackendEnv BackendEnv;
     
 private:
-#if defined(WITH_NODEJS)
-    uv_loop_t* NodeUVLoop;
-
-    std::unique_ptr<node::ArrayBufferAllocator> NodeArrayBufferAllocator;
-
-    node::IsolateData* NodeIsolateData;
-
-    node::Environment* NodeEnv;
-
-    const float UV_LOOP_DELAY = 0.1;
-#endif
-    v8::Isolate::CreateParams* CreateParams;
-
     std::vector<FCallbackInfo*> CallbackInfos;
+    
+    std::vector<FCallbackInfoWithFinalize*> CallbackWithFinalizeInfos;
 
     std::vector<FLifeCycleInfo*> LifeCycleInfos;
 
@@ -228,9 +205,21 @@ private:
 
     std::mutex JSObjectsMutex;
 
-    V8Inspector* Inspector;
-
+    JSFunction* ModuleExecutor = nullptr;
+    
+#ifdef WITH_IL2CPP_OPTIMIZATION
+    FCppObjectMapper CppObjectMapper;
+#endif
+    
 public:
+    JSFunction* JSObjectValueGetter = nullptr;
+
+    JSFunction* GetModuleExecutor();
+
     v8::Local<v8::FunctionTemplate> ToTemplate(v8::Isolate* Isolate, bool IsStatic, CSharpFunctionCallback Callback, int64_t Data);
+    
+    v8::MaybeLocal<v8::Function> CreateFunction(CSharpFunctionCallback Callback, JsFunctionFinalizeCallback Finalize, int64_t Data);
+
+    std::string GetJSStackTrace();
 };
 }

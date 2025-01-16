@@ -1,5 +1,7 @@
 # 安装PuerTS    
 
+如果你不清楚该使用哪种安装方式，该用哪个版本，请参见 [FAQ](./faq.md#安装相关)
+
 ### GitHub Clone 并用 Unity UPM 安装
 
 带有upm的unity版本，可以使用这种方式安装
@@ -29,4 +31,4 @@ PuerTS 现已上传 OpenUPM: https://openupm.com/packages/com.tencent.puerts.cor
 
 > mac下如果遇到移入废纸篓问题，请使用sudo xattr -r -d com.apple.quarantine puerts.bundle。但用了后提交git容易出问题
 
-#### 当然还有一种最傻瓜的办法：从官方Demo中拷贝出来用。
+#### 当然还有一种最简单的办法：从官方Demo中拷贝出来用。

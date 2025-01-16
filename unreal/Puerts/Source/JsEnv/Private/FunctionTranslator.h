@@ -16,12 +16,16 @@
 #include "CoreUObject.h"
 #include "PropertyTranslator.h"
 
+#include "NamespaceDef.h"
+
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #pragma warning(push, 0)
 #include "libplatform/libplatform.h"
 #include "v8.h"
 #pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 class FFunctionTranslator
 {
@@ -105,6 +109,8 @@ protected:
 
     bool IsStatic;
 
+    bool SkipWorldContextInArg0;
+
     uint32 ParamsBufferSize;
 
     void* ArgumentDefaultValues;
@@ -142,4 +148,4 @@ private:
 
     bool IsUObject;
 };
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

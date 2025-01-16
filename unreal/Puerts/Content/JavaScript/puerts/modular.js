@@ -53,7 +53,7 @@ var global = global || (function () { return this; }());
 
     let moduleCache = Object.create(null);
     let buildinModule = Object.create(null);
-    function executeModule(fullPath, script, debugPath, sid, isESM) {
+    function executeModule(fullPath, script, debugPath, sid, isESM, bytecode) {
         sid = (typeof sid == 'undefined') ? 0 : sid;
         let fullPathInJs = fullPath.replace(/\\/g, '\\\\');
         let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
@@ -63,8 +63,8 @@ var global = global || (function () { return this; }());
         let wrapped = evalScript(
             // Wrap the script in the same way NodeJS does it. It is important since IDEs (VSCode) will use this wrapper pattern
             // to enable stepping through original source in-place.
-            isESM ? script: "(function (exports, require, module, __filename, __dirname) { " + script + "\n});", 
-            debugPath, isESM, fullPath
+            (isESM || bytecode) ? script: "(function (exports, require, module, __filename, __dirname) { " + script + "\n});", 
+            debugPath, isESM, fullPath, bytecode
         )
         if (isESM) return wrapped;
         wrapped(exports, puerts.genRequire(fullDirInJs), module, fullPathInJs, fullDirInJs)
@@ -76,7 +76,33 @@ var global = global || (function () { return this; }());
         return (packageConfigure && packageConfigure.type === "module") ? packageConfigure.main : undefined;
     }
     
-    function genRequire(requiringDir, isESM) {
+    function getSourceLengthFromBytecode(buf, isESM) {
+        let sourceHash = (new Uint32Array(buf))[2];
+        //console.log(`sourceHash:${sourceHash}`);
+        const kModuleFlagMask = (1 << 31);
+        const mask = isESM ? kModuleFlagMask : 0;
+
+        // Remove the mask to get the original length
+        const length = sourceHash & ~mask;
+
+        return length;
+    }
+    
+    let baseString
+    function generateEmptyCode(length) {
+        if (baseString === undefined) {
+            baseString = " ".repeat(128*1024);
+        }
+        if (length <= baseString.length) {
+            return baseString.slice(0, length);
+        } else {
+            const fullString = baseString.repeat(Math.floor(length / baseString.length));
+            const remainingLength = length % baseString.length;
+            return fullString.concat(baseString.slice(0, remainingLength));
+        }
+    }
+    
+    function genRequire(requiringDir, outerIsESM) {
         let localModuleCache = Object.create(null);
         function require(moduleName) {
             if (org_require) {
@@ -106,6 +132,9 @@ var global = global || (function () { return this; }());
             }
             
             let [fullPath, debugPath] = moduleInfo;
+            if(debugPath.startsWith("Pak: ")){
+                debugPath = fullPath
+            }
             
             let key = fullPath;
             if ((key in moduleCache) && !forceReload) {
@@ -116,25 +145,51 @@ var global = global || (function () { return this; }());
             localModuleCache[moduleName] = m;
             moduleCache[key] = m;
             let sid = addModule(m);
-            let script = loadModule(fullPath);
-            isESM = isESM === true || fullPath.endsWith(".mjs")
-            if (fullPath.endsWith(".cjs")) isESM = false;
-            if (fullPath.endsWith(".json")) {
-                let packageConfigure = JSON.parse(script);
-                
-                if (fullPath.endsWith("package.json") && packageConfigure.main) {
-                    isESM = packageConfigure.type === "module"
-                    let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
-                    let tmpRequire = genRequire(fullDirInJs, isESM);
-                    let r = tmpRequire(packageConfigure.main);
-                    tmpModuleStorage[sid] = undefined;
-                    m.exports = r;
+            let isESM = outerIsESM === true || fullPath.endsWith(".mjs") || fullPath.endsWith(".mbc");
+            if (fullPath.endsWith(".cjs") || fullPath.endsWith(".cbc")) isESM = false;
+            let script = isESM ? undefined : loadModule(fullPath);
+            let bytecode = undefined;
+            if (fullPath.endsWith(".mbc") || fullPath.endsWith(".cbc")) {
+                bytecode = script;
+                script = generateEmptyCode(getSourceLengthFromBytecode(bytecode));
+            }
+            try {
+                if (fullPath.endsWith(".json")) {
+                    let packageConfigure = JSON.parse(script);
+                    
+                    if (fullPath.endsWith("package.json")) {
+                        isESM = packageConfigure.type === "module"
+                        let url = packageConfigure.main || "index.js";
+                        if (isESM) {
+                            let packageExports = packageConfigure.exports && packageConfigure.exports["."];
+                            if (packageExports)
+                                url =
+                                    (packageExports["default"] && packageExports["default"]["require"]) ||
+                                    (packageExports["require"] && packageExports["require"]["default"]) ||
+                                    packageExports["require"];                        
+                            if (!url) {
+                                throw new Error("can not require a esm in cjs module!");
+                            }
+                        }
+                        let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
+                        let tmpRequire = genRequire(fullDirInJs, isESM);
+                        let r = tmpRequire(url);
+                        
+                        m.exports = r;
+                    } else {
+                        m.exports = packageConfigure;
+                    }
                 } else {
-                    tmpModuleStorage[sid] = undefined;
-                    m.exports = packageConfigure;
+                    let r = executeModule(fullPath, script, debugPath, sid, isESM, bytecode);
+                    if (isESM) {
+                        m.exports = r;
+                    }
                 }
-            } else {
-                executeModule(fullPath, script, debugPath, sid, isESM);
+            } catch(e) {
+                localModuleCache[moduleName] = undefined;
+                moduleCache[key] = undefined;
+                throw e;
+            } finally {
                 tmpModuleStorage[sid] = undefined;
             }
             return m.exports;
@@ -190,4 +245,6 @@ var global = global || (function () { return this; }());
     puerts.forceReload = forceReload;
     
     puerts.getModuleByUrl = getModuleByUrl;
+    
+    puerts.generateEmptyCode = generateEmptyCode;
 }(global));

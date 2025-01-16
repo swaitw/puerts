@@ -1,97 +1,176 @@
 ![Logo](./doc/pic/puerts_logo.png)
 
 [![license](https://img.shields.io/badge/license-BSD_3_Clause-blue.svg)](https://github.com/Tencent/puerts/blob/master/LICENSE)
-[![unreal](https://img.shields.io/badge/unreal-v1.0.3-blue.svg)](https://github.com/Tencent/puerts/releases/tag/Unreal_v1.0.3)
-[![unity](https://img.shields.io/badge/unity-v1.4.0-blue.svg)](doc/unity/zhcn/install.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](https://github.com/Tencent/puerts/pulls)
+
+[![unreal](https://img.shields.io/badge/unreal-v1.0.7-blue.svg)](https://github.com/Tencent/puerts/releases/tag/Unreal_v1.0.7)
+
+[![unity](https://img.shields.io/badge/unity(stable)-v2.1.1-blue.svg)](doc/unity/zhcn/install.md)
 ![Unity_Test](https://github.com/Tencent/puerts/workflows/unity%20unittest/badge.svg)
 
-## What？
+[跳转中文](#what---普洱ts是什么)
+
+## WHAT is PuerTS (PUER Typescript)?
  
-PuerTS is a TypeScript programming solution within game engines. | PuerTS是游戏引擎下的TypeScript编程解决方案
-* provides a JavaScript Runtime | 提供了一个JavaScript运行时
+`PuerTS` is a TypeScript programming solution in Unity/Unreal/DotNet.
+* provides a JavaScript Runtime.
+* allows TypeScript to access the host engine with the help of TypeScript declarations generation.
 
-* allows TypeScript to access the host engine by including: | 提供通过TypeScript访问宿主引擎的能力，包括:
-  * module-binding on the JavaScript level | JavaScript层面的绑定
-  * TypeScript declarations generation | TypeScript声明文件生成
+## WHY should I use PuerTS?
 
+* Facilitates game-building processes by combining JavaScript/Node.js ecosystem and professional game engines
+* In contrast to Lua script, TypeScript supports static type checking, which significantly improves code robustness and maintainability.
+* High efficiency: supports reflection call throughout the host - no extra steps needed for interop with C++/C#.
+* High performance: supports static wrapper generation - handles complex scenes with high-performance demands.
+* Talented WebGL Support: massive advantage in performance and dev efficiency compared to Lua, even faster than pure C# in some cases.
 
-## Why?
-
-* Facililates game building processes by combining JavaScript ecosystem with the rendering power of professional game engines
-* JavaScript生态有众多的库和工具链，结合专业商业引擎的渲染能力，快速打造游戏
-
-> 
-
-* In contrast to lua script, TypeScript supports static type checking, which significantly improves code robustness and maintainability.
-* 相比游戏领域常用的lua脚本，TypeScript的静态类型检查有助于编写更健壮，可维护性更好的程序
-
-> 
-
-* High efficiency: supports reflection binding throughout the platform (engine) - no extra steps (code generation) needed for development.
-* 高效：全引擎，全平台支持反射Binding，无需额外（生成代码）步骤即可开发
-
-> 
-
-* High performance：supports static binding throughout the platform (engine) - takes care of complex scenes
-* 高性能：全引擎，全平台支持静态Binding，兼顾了高性能的场景
-
-> 
-
-* Talented WebGL Support: huge advantage in performance and dev efficiency compare to Lua.
-* WebGL平台下的天生优势：相比Lua脚本在WebGL版本的表现，PuerTS在性能和效率上都有极大提升。
+## HOW can I start to use PuerTS
+[Documentation](https://puerts.github.io/en)
 
 ---
 
-## Documentation | 官方文档
-
-* [Doc for Unity](https://puerts.github.io/unity/en/readme) | [Unity版文档](https://puerts.github.io/unity/zhcn/readme)
-* [Doc for UE](https://puerts.github.io/unreal/en/readme) | [UE版文档](https://puerts.github.io/unreal/zhcn/readme)
-
-## FAQ | 常见问题
+## FAQ
 
 * [general faq](doc/faq.md)
-* [unreal faq](doc/unreal/zhcn/faq.md)
-* [unity faq](doc/unity/zhcn/faq.md)
+* [unreal faq](doc/unreal/en/faq.md)
+* [unity faq](doc/unity/en/faq.md)
 
----
+## How to Install
 
-## How to Install | 最新版本安装
-
-* [unreal](doc/unreal/zhcn/install.md)
+* [unreal](doc/unreal/en/install.md)
 * [unity](doc/unity/en/install.md)
 
 ### Changelog
 
-* [unreal](doc/unreal/zhcn/changelog.md)
-* [unity](doc/unity/zhcn/changelog.md)
+* [unreal](doc/unreal/en/changelog.md)
+* [unity](unity/Assets/core/upm/changelog.md)
 
-### Known issues | 已知问题与解决办法
+### Known issues
+
+* [unreal](doc/unreal/en/bugs.md)
+* [unity](doc/unity/en/bugs.md)
+
+---
+
+## Select Script Engine
+
+Currently puerts supports three script engines: v8, quickjs, nodejs, choose the one that suits you.
+
+* V8 (default): Generally excellent performance, moderate code size, only includes the implementation of the ECMAScript specification, does not include Node.js API or browser API.
+
+* QuickJS: Performance is not as good as V8, does not support debugging, but has a small code size, suitable for scenarios where code size is critical.
+
+* Node.js: Supports Node.js API (OpenSSL-related APIs are not supported on Unreal Engine's mobile platform), but has a larger code size.
+
+
+| Script Engine | Node api | Performance | Code Size | Debugging | Notes |
+| --- | --- | --- | --- | --- | --- |
+| V8 | ❌ | `*****` | `***` | ✔️ | |
+| QuickJS | ❌ | `**` | `*` | ❌ | |
+| Node.js | ✔️ | `*****` | `*****` | ✔️ | OpenSSL may be disabled |
+
+## Avaliable on these Engine
+
+* unreal engine 4.22 ~ latest
+
+* unity 5 ~ latest
+
+* Any .net project
+
+## Available on these Platform
+
+* iOS
+* Android
+* OpenHarmony
+* Windows
+* Macos
+
+
+## Ask for help
+
+[Github Discussion](https://github.com/Tencent/puerts/discussions)
+
+------
+
+## WHAT - 普洱TS是什么?
+PuerTS是 Unity/Unreal/Dotnet 下的TypeScript编程解决方案
+
+* 提供了一个JavaScript运行时
+* 提供TypeScript声明文件生成能力，易于通过TypeScript访问宿主引擎，
+
+
+## WHY - 为什么我该用普洱TS?
+
+* JavaScript生态有众多的库和工具链，结合专业商业引擎的渲染能力，快速打造游戏
+* 相比游戏领域常用的lua脚本，TypeScript的静态类型检查有助于编写更健壮，可维护性更好的程序
+* 高效：全引擎，全平台支持反射调用，无需额外步骤即可与宿主C++/C#通信。
+* 高性能：全引擎，全平台支持生成静态调用桥梁，兼顾了高性能的场景。
+* WebGL平台下的天生优势：相比Lua脚本在WebGL版本的表现，PuerTS在性能和效率上都有极大提升，目前极限情况甚至比C#更快。
+
+## HOW - 我该怎么开始
+
+* [官方文档](https://puerts.github.io)
+
+---
+
+
+## 常见问题
+
+* [通用 faq](doc/faq.md)
+* [unreal faq](doc/unreal/zhcn/faq.md)
+* [unity faq](doc/unity/zhcn/faq.md)
+
+## 最新版本安装
+
+* [unreal](doc/unreal/zhcn/install.md)
+* [unity](doc/unity/zhcn/install.md)
+
+### 改动日志
+
+* [unreal](doc/unreal/zhcn/changelog.md)
+* [unity](unity/Assets/core/upm/changelog-hans.md)
+
+### 已知问题与解决办法
 
 * [unreal](doc/unreal/zhcn/bugs.md)
 * [unity](doc/unity/zhcn/bugs.md)
 
 ---
 
-## Avaliable on these Engine | 引擎
+## 脚本引擎选择
+
+目前puerts支持三种脚本引擎：v8、quickjs、nodejs，选择合适你的那个。
+
+* v8（默认）：综合比较优秀，高性能，代码体积适中，仅包含ecmascript规范的实现，不包含nodejs api、浏览器 api
+
+* quickjs： 性能不如v8，不支持调试，但代码体积小，适用于代码段大小敏感型业务
+
+* nodejs：支持nodejs api（unreal engine的移动平台下不支持openssl相关api），代码体积较大
+
+| 脚本引擎 | Node api | 性能 | 代码体积 | 调试 | 补充 |
+| --- | --- | --- | --- | --- | --- |
+| V8 | ❌ | `*****` | `***` | ✔️ | |
+| QuickJS | ❌ | `**` | `*` | ❌ | |
+| Node.js | ✔️ | `*****` | `*****` | ✔️ | OpenSSL 可能被禁用 |
+
+## 可用引擎
 
 * unreal engine 4.22 ~ latest
 
 * unity 5 ~ latest
 
-* Any .net project | 任意.net环境
+* 任意.net环境
 
-## Available on these Platform | 平台
+## 可用平台
 
 * iOS
 * Android
+* 鸿蒙（OpenHarmony）
 * Windows
 * Macos
 
 
-## Ask for help | 技术支持
-
-[Discord](https://discord.gg/RYRY7D833n)
+## 技术支持
 
 [Github Discussion](https://github.com/Tencent/puerts/discussions)
 

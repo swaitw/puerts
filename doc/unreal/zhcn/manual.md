@@ -1,22 +1,35 @@
 # Puerts-Unreal使用手册
 
-puerts的核心功能主要是：
+## puerts的本质
 
-* 在（UE）引擎启动（JavaScript）虚拟机环境
+puerts的本质是：
+
+* 在（UE）引擎提供了JavaScript虚拟机环境
 
 * 让TypeScript/JavaScript能够和引擎交互，或者说能调用C++或者蓝图API，也能被C++或者蓝图调用到
 
-下面分别介绍
+js虚拟机实现了js语言，但js语言本身基本什么都干不了，它能做的事情取决于宿主环境给它添加的api，比如浏览器在js环境添加了dom操作api，于是浏览器里的js可以编写动态页面的逻辑，比如nodejs添加异步网络（io）api，于是nodejs里的js能用来编写web服务器。
 
-## 虚拟机启动
+puerts里js的宿主环境是游戏引擎，又添加了哪些api呢？
 
-### 自行构造puerts::FJsEnv
+首先，puerts默认导入了**所有**反射api。换句话在UE蓝图里能调用的引擎API，在Typescript/JavaScript环境都可以调用，如果用Typescript，正确引入了声明文件到工程中，这些api会有提示。
+
+其次对于非反射api，手工封装成反射后蓝图也能访问，这点在typescript同样适用，而且puerts还额外支持[《基于模板的静态绑定》](template_binding.md)，按文档声明一下在typescript即可调用。
+
+在puerts里，要实现一项游戏编程任务，先想下这任务在C++或者蓝图里如何实现，然后在typescript调用同样的api去实现。
+
+puerts并未重定义引擎，只是定义了ts和引擎相互调用的规则。puerts的demo也倾向于演示这些规则，而不是做一个游戏。
+
+
+## puerts::FJsEnv
+
+一个puerts::FJsEnv实例代表一个虚拟机实例（可以类比一个nodejs进程）
 
 * 在合适的地方（比如GameInstance）根据需要构造一个或者多个虚拟机
-    - 如果启动多个虚拟机，这些虚拟机间是相互隔离的
+    - 如果启动多个虚拟机，这些虚拟机间是相互隔离的（可以类比多个nodejs进程间数据是隔离的）
 
 * 通过Start函数启动一个脚本，作为脚本逻辑的入口（类似c的main函数）
-    - Start可以传入一些数据作为参数，供脚本获取使用
+    - Start可以传入一些数据作为参数，供脚本获取使用（可以类比为nodejs命令输入的入口脚本）
 
 示例，在GameInstance的OnStart构造虚拟机，并在Shutdown删除
 
@@ -52,15 +65,6 @@ import {argv} from 'puerts';
 let world = (argv.getByName("GameInstance") as UE.GameInstance).GetWorld();
 ~~~
 
-### 开启“继承引擎类功能”
-
-开启该功能，Puerts会构造一个默认的虚拟机
-
-* 引擎构造一个TypeScript（代理对象）时，要跑脚本，找的是这个虚拟机，但这个虚拟机本身相比自行构造的虚拟机没什么两样，和UE的交互规则都一样
-
-* 该虚拟机不会启动一个启动脚本，也不会传参数，因而argv不可用，也没必要用
-
-* 原来的入口脚本可以通过覆盖ReceiveBeginPlay之类的回调来实现
 
 ## TypeScript和引擎的相互调用
 
@@ -72,7 +76,7 @@ UE里头，支持反射的API（标注了UCLASS，UPPROPERTY，UFUNCTION，USTRU
 
 要注意的是，在TypeScript里的类名是的UE类型ScriptName，相比C++类，都是去了前缀的，比如FVector在TypeScript里头是Vector，AActor是Actor。
 
-反射api的使用文档在[这](interact_with_uclass.md)。
+反射api的使用文档：[script_call_uclass](script_call_uclass.md)。
 
 如果非反射C++ API呢？比如UE部分C++ API，比如第三方C++库。
 
@@ -106,4 +110,26 @@ UE里头，支持反射的API（标注了UCLASS，UPPROPERTY，UFUNCTION，USTRU
 * Puerts会拦截代理蓝图类的调用，重定向到默认的虚拟机里对应的脚本逻辑
 
 继承引擎类功能的启用和使用看[这里](uclass_extends.md)
+
+！！继承引擎类功能使用建议
+
+我发现不少项目把该功能当成“蓝图”的另一种写法，大面积的使用该功能直接去完成游戏逻辑。
+
+该功能的滥用会导致密集的跨语言交互进而导致性能问题。
+
+实际上该功能建议使用场景是：项目已经开发了挺久了，已经是一个成型的项目，要贸然添加脚本对原有架构冲击很大，于是可以用这功能，写些继承ue类的ts类作为原有系统和新脚本系统间的边界（原有系统能认识这种ts类生成的代理蓝图），而且在这个场景下也是作为边界有限的使用，仍然切记不要滥用。
+
+## puerts::FJsEnv、蓝图mixin功能、继承引擎类功能间的关系
+
+* 一个puerts::FJsEnv就是一个虚拟机实例，虚拟机间数据是隔离的。
+
+* 蓝图mixin功能是puerts::FJsEnv的一个特性，或者说任意一个puerts::FJsEnv都有蓝图mixin功能。
+
+* 继承引擎类功能是基于puerts::FJsEnv之上构建的功能
+
+  - 它会分析ts类，并生成相应的（代理）蓝图，代理蓝图的特点是只有数据，没有逻辑（空函数）；
+  
+  - 代理蓝图启动，空函数会被重定向到ts（准确来说是ts编译后的js），对于ue引擎来说，代理蓝图就是普通蓝图，并无特殊性；
+  
+  - 由于（代理）蓝图由ue引擎实例化，其构建就关联到某个虚拟机上的js逻辑，并需要执行构造逻辑，于是该功能需要启动一个默认的puerts::FJsEnv，这个puerts::FJsEnv和你new的puerts::FJsEnv实例没有区别，也有蓝图mixin功能，而且根据第一条，和其它地方new的puerts::FJsEnv是相互隔离的。
 

@@ -8,28 +8,24 @@
 
 #pragma once
 
-#include <map>
 #include <string>
-#include <algorithm>
 #include <functional>
 #include <memory>
 
 #include "CoreMinimal.h"
-#include "UObject/GCObject.h"
-#include "Containers/Ticker.h"
-#include "ObjectRetainer.h"
 #include "JSLogger.h"
 #include "JSModuleLoader.h"
+#include "PString.h"
 #if !defined(ENGINE_INDEPENDENT_JSENV)
 #include "ExtensionMethods.h"
 #endif
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 class JSENV_API IJsEnv
 {
 public:
-    virtual void Start(const FString& ModuleName, const TArray<TPair<FString, UObject*>>& Arguments, bool IsScript) = 0;
+    virtual void Start(const FString& ModuleName, const TArray<TPair<FString, UObject*>>& Arguments) = 0;
 
     virtual bool IdleNotificationDeadline(double DeadlineInSeconds) = 0;
 
@@ -49,7 +45,7 @@ public:
 
     virtual void ReloadModule(FName ModuleName, const FString& JsSource) = 0;
 
-    virtual void ReloadSource(const FString& Path, const std::string& JsSource) = 0;
+    virtual void ReloadSource(const FString& Path, const PString& JsSource) = 0;
 
     virtual void OnSourceLoaded(std::function<void(const FString&)> Callback) = 0;
 
@@ -68,11 +64,10 @@ public:
     explicit FJsEnv(const FString& ScriptRoot = TEXT("JavaScript"));
 
     FJsEnv(std::shared_ptr<IJSModuleLoader> InModuleLoader, std::shared_ptr<ILogger> InLogger, int InDebugPort,
-        std::function<void(const FString&)> InOnSourceLoadedCallback = nullptr, void* InExternalRuntime = nullptr,
-        void* InExternalContext = nullptr);
+        std::function<void(const FString&)> InOnSourceLoadedCallback = nullptr, const FString InFlags = FString(),
+        void* InExternalRuntime = nullptr, void* InExternalContext = nullptr);
 
-    void Start(const FString& ModuleName, const TArray<TPair<FString, UObject*>>& Arguments = TArray<TPair<FString, UObject*>>(),
-        bool IsScript = false);
+    void Start(const FString& ModuleName, const TArray<TPair<FString, UObject*>>& Arguments = TArray<TPair<FString, UObject*>>());
 
     bool IdleNotificationDeadline(double DeadlineInSeconds);
 
@@ -91,7 +86,7 @@ public:
 
     void ReloadModule(FName ModuleName, const FString& JsSource);
 
-    void ReloadSource(const FString& Path, const std::string& JsSource);
+    void ReloadSource(const FString& Path, const PString& JsSource);
 
     void OnSourceLoaded(std::function<void(const FString&)> Callback);
 
@@ -105,4 +100,4 @@ private:
     std::unique_ptr<IJsEnv> GameScript;
 };
 
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

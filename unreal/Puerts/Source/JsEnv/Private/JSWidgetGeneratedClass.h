@@ -8,10 +8,14 @@
 
 #pragma once
 
+#include "NamespaceDef.h"
+
+PRAGMA_DISABLE_UNDEFINED_IDENTIFIER_WARNINGS
 #pragma warning(push, 0)
 #include "libplatform/libplatform.h"
 #include "v8.h"
 #pragma warning(pop)
+PRAGMA_ENABLE_UNDEFINED_IDENTIFIER_WARNINGS
 
 #include "DynamicInvoker.h"
 
@@ -39,7 +43,7 @@ public:
 
     v8::UniquePersistent<v8::Object> Prototype;
 
-    TWeakPtr<puerts::IDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
+    TWeakPtr<PUERTS_NAMESPACE::IDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
 
 #ifdef THREAD_SAFE
     v8::Isolate* Isolate;

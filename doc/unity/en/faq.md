@@ -1,130 +1,133 @@
 # FAQ
 
-## invalid arguments to XXX
+## ErrorCode relavanted
 
-如果你用js，可能是输错参数了。
+#### [Puer001]DllNotFoundException: puerts
 
-如果你用typescript，可能是子类同名，但不同参数的函数覆盖了父类。以System.Text.Encoding.UTF8.GetBytes为例，你直接调用会报错。
+This error means that Unity cannot load the Native Plugin of PuerTS, such as `.dll` on Windows, `.dylib` or `.bundle` on macOS, `.a`, `.so`, etc. on other platforms.
+
+There are several possible reasons for this error:
+1. You did not put the Native Plugin of PuerTS in the Assets directory.
+2. The Import Setting of the Native Plugin, i.e., the platform setting, is not correct. Please click on the corresponding file in Unity to set the platform correctly. Alternatively, you can copy the corresponding meta file from the [official demo project](https://github.com/chexiongsheng/puerts_unity_demo).
+3. The system library that the Native Plugin depends on does not exist. You can use `otool` on Mac, `objdump` on Linux, or [Dependencies](https://github.com/lucasg/Dependencies) on Windows to check the dependencies of the Native Plugin file. After finding out the missing dependencies, you need to install them yourself.
+
+Related issue: https://github.com/Tencent/puerts/issues/941
+
+#### [Puer002]module not found | [Puer003]module not found
+
+`Puer002` means that PuerTS cannot find the corresponding js file when loading the js file. Specifically, when calling the `FileExists` function of ILoader or the `Resolve` function of IResolvableLoader, it returns false or an empty string or null.
+
+If you encounter this problem, first check whether you are using the DefaultLoader (i.e., not passing any parameters when creating JsEnv) or your own custom Loader. Then check the `FileExists` function or the `Resolve` function of this Loader to see why it returns an incorrect value.
+
+`Puer003` is similar to `Puer002`, except that the `ReadFile` function of Loader returns empty. You also need to check why `FileExists` or `Resolve` returns true, but `ReadFile` reads empty.
+
+#### [Puer W001] You are not using upm to install PuerTS or did not add 'PUERTS_CPP_OUTPUT_TO_UPM' definition.
+
+In xil2cpp mode, the product of PuerTS->Generate needs to be recompiled by the plugin to be used. Therefore, Puer needs to put the product of Generate back to the plugin source code directory. 
+
+If you did not use the recommended way of [document](./performance/il2cpp.md) to `git clone` and add PuerTS from the package manager, plus adding the `PUERTS_CPP_OUTPUT_TO_UPM` macro, you need to take the compiled product and compile the plugin yourself.
+
+## Installation relavanted
+
+#### What do `Stable/Latest`, `RC/Preview` mean in versions?
+1. Stable: Stable means that this version has been verified for a long time and can be used stably with few obvious problems.
+2. latest: Latest means that this versions will carry the latest features, such as compatibility with recent upstream/downstream changes (such as the launch of the mac m series CPU), better performance or stronger feature.
+
+`pre/rc` in version tag:
+2. Preview or pre: Preview means that this version comes with some experimental features, and these features may be modified/deleted in the future
+3. RC: Means release candidate. A version entering RC from preview means that this version number will not add/modify/delete functions radically, and the number of bugs will gradually converge. When there is no bug feedback for a period of time, it will enter the release stage.
+
+#### What do V8/QuickJS/NodeJS mean in PuerTS backend?
+1. PuerTS itself is not responsible for compiling or interpreting JavaScript, but does this by introducing third-party JS engines. By default, the NodeJS engine is used. However, depending on the different usage scenarios, you can also use the QuickJS and NodeJS backends.
+2. V8 the classic choise. best performance, debugging support, and medium size.
+3. QuickJS does not support debugging and JIT, but it is very small. Sometimes you may need to compress the installation package size. Then you can use the quickjs version of plugins.
+4. NodeJS is the backend used in OpenUPM package. For a detailed introduction to NodeJS, please refer to the [official website](https://nodejs.org/). It provides APIs such as **files** and **networks** based on v8. It supports most of the powerful ecology of JavaScript. With it, you can use various packages brought by npm more smoothly. If you have follow-up questions about using npm packages, please refer to [puerts-ts-loader](https://github.com/zombieyang/puerts-ts-loader).
+
+#### How to choose between OpenUPM/Git Clone/Copy installation?
+1. **Simplest Step-OpenUPM**: You only need to run `openupm add xxx`. However, it is limited by the upm design of Unity itself. When you modify the internal code of the package, Unity will automatically reset it for you. If you have modification requirements, you need to copy the package contents from Library/PackageCache by yourself, and then change it to use the local path in PackageManager.
+2. **Most Flexible-Git Clone and add**: Git Clone and then use the local path in PackageManager can directly solve the problem of difficult modification. But you'd better check out the appropriate tag to use (the code on the master branch is not always fully tested).
+3. **Brain Dead Easy-just copy into Unity**: Download and install from [github release](https://github.com/Tencent/puerts/releases) without any prior knowledge, the easiest to get started. However, after version 2.0, PuerTS will gradually add some auxiliary functions that are only available in the UPM system, and will not work in this installation way.
+
+
+## Other
+
+#### invalid arguments to XXX
+
+If you use js, it may be because you entered the wrong arguments.
+
+If you use typescript, it may be because a function with the same name but different parameters in the subclass overrides the function in the parent class. For example, `System.Text.Encoding.UTF8.GetBytes` will cause an error if you call it directly.
 
 ```csharp
 System.Text.Encoding.UTF8.GetBytes("你好");
 ```
 
-System.Text.Encoding.UTF8指向的对象System.Text.UTF8Encoding，有GetBytes的其它重载，按目前的实现找到当前类有同名函数就不再找基类导致的。这时候你可以手动指定下用其基类接口访问该对象。
-
+The object that `System.Text.Encoding.UTF8` points to is `System.Text.UTF8Encoding`, which has other overloads of `GetBytes`. According to the current implementation, if a function with the same name is found in the current class, it will not look for the base class. In this case, you can manually specify to access the object using its base class interface.
 
 ```csharp
-Object.setPrototypeOf(System.Text.Encoding.UTF8, System.Text.Encoding.prototype);//只需要调用过一次即可。后续调用GetBytes都不用再调用。
+Object.setPrototypeOf(System.Text.Encoding.UTF8, System.Text.Encoding.prototype);//Only need to call it once. Subsequent calls to GetBytes do not need to call it again.
 System.Text.Encoding.UTF8.GetBytes("你好");
 ```
 
-## setInterval没回调
+#### setInterval does not callback
 
-可能是没调用JsEnv.Tick
+It may be because you did not call JsEnv.Tick.
 
-## 如何调试
+#### How to debug
 
-这是[vscode](./other/debugging.md)，其它IDE的看各IDE的指引，按nodejs的调试来处理即可。
+This is [vscode](./knowjs/debugging.md). For other IDEs, please refer to their guides and handle them as nodejs debugging.
 
-## 如果需要调试，ILoader的debugpath参数该如何处理？
-ts/js中调用require('./a/b')时，ILoader会被调用并传入字符串".../a/b.js"(相对rootPath的完整路径)，你需要理解这字符串并(从文件/内存/网络等)加载好js文件并直接返回。而debugpath需要返回调试器可以理解的路径(比如js文件的绝对路径: D:/.../a/b.js)，通过设置out string debuggpath参数返回，调试器后续根据这个文件路径来匹配文件上的断点。
-> Windows平台不区分文件大小写名称且使用反斜杠"\\"代替"/"
+#### How to handle the debugpath parameter of ILoader when debugging?
 
+When you call `require('./a/b')` in ts/js, ILoader will be called and passed the string ".../a/b.js" (the complete path relative to rootPath). You need to understand this string and load the js file (from file/memory/network, etc.) and return it directly. The debugpath needs to return a file path that the debugger can understand (such as the absolute path of the js file: D:/.../a/b.js), which is returned by setting the out string debuggpath parameter. The debugger will subsequently match the breakpoint on the file based on this file path.
+> Windows platform does not distinguish between file name case and uses backslash "\\" instead of "/"
 
-## can not find delegate bridge for XXX
+#### can not find delegate bridge for XXX
 
-你将一个js函数映射为一个delegate有时会报这错误，XXX就是要映射的delegate，可能的情况如下：
+Sometimes you will get this error when you map a js function to a delegate. XXX is the delegate to be mapped, and the possible situations are as follows:
 
-* 该delegate带了值类型参数或者返回值，解决办法：如果没有返回值，用JsEnv.UsingAction声明下，有返回值就用JsEnv.UsingFunc声明。关于做这项工作的必要性，可参见这个[stackoverflow问题](https://stackoverflow.com/questions/56183606/invoke-generic-method-via-reflection-in-c-sharp-il2cpp-on-ios)
+* The delegate has value type parameters or return values. Solution: If there is no return value, use JsEnv.UsingAction to declare it. If there is a return value, use JsEnv.UsingFunc to declare it. For the necessity of doing this work, please refer to this [stackoverflow question](https://stackoverflow.com/questions/56183606/invoke-generic-method-via-reflection-in-c-sharp-il2cpp-on-ios).
 
-* 参数数量超过4个，解决办法：官方目前只支持4个，如果有需要，可以依葫芦画瓢写更多的参数支持。
+* The number of parameters exceeds 4. Solution: The official currently only supports 4. If necessary, you can write more parameter support by analogy.
 
-* 参数含ref，out的修饰，目前尚未支持，解决办法：填写issues来提需求
+* The parameters contain the ref or out modifier, which is not currently supported. Solution: Fill in the issues to provide requirements.
 
+```csharp
+// 代码示例
+Puerts.JsEnv jsEnv = new Puerts.JsEnv();
+jsEnv.UsingFunc<int, int>();
+System.Func<int, int> add = env.Eval<System.Func<int, int>>(@"
+    const add_func = function (num) {
+        return num + 1;
+    }
+    add_func;
+");
+Console.WriteLine(add(10));
+```
 
-## maOS10.15以上,启动unity的时候提示puerts.bundle损坏,移动到废纸篓
+#### macOS 10.15 or later prompts that puerts.bundle is damaged and moves it to the trash when starting Unity
 
-执行
+Execute
 
 ~~~bash
-sudo xattr -r -d com.apple.quarantine puer.bundle
-~~~
+sudo xattr -r -d com.apple.quarantine puerts.bundle
+~~~ 
 
-## 生成代码打包手机版本时报方法（runInEditMode等等）找不到
+#### The generated code reports that the method (runInEditMode, etc.) cannot be found when packaging for mobile
 
-因为这些方法是编辑器独有的，可以通过filter过滤掉，filter使用参考[使用手册](manual.md)
+Because these methods are unique to the editor, they can be filtered out using the filter. Please refer to the [user manual](wrapper/filter.md) for the configuration of link.xml.
 
-## 编辑器下运行正常，il2cpp打包后调用函数/访问属性失败
+#### The code generated in the editor runs normally, but calling functions/accessing properties fails after il2cpp packaging
 
-unity默认会进行代码剪裁，简而言之unity发现某引擎api，系统api没有被业务c#使用，就不编译倒cpp。
-解决办法：1、对要调用的api生成wrap代码，这样c#里头就有了引用；2、通过link.xml告知unity别剪裁，link.xml的配置请参考unity官方文档。
+Unity will perform code pruning by default. In short, if Unity finds that some engine APIs or system APIs have not been used in the business C#, it will not compile them to cpp. Solution: 1. Generate wrap code for the API to be called, so that C# has a reference to it; 2. Inform Unity not to prune by using link.xml. Please refer to the Unity official documentation for the configuration of link.xml.
 
-## 编辑器下运行正常，打包的时候生成代码报“没有某方法/属性/字段定义”怎么办？
-往往是由于该方法/属性/字段是扩在条件编译里头，只在UNITY_EDITOR下有效，这时需要把这方法/属性/字段通过Filter标签过滤，之后重新执行代码生成并打包。([discussions说明](https://github.com/Tencent/puerts/discussions/806))
+#### The code generated in the editor runs normally, but the generated code reports that "there is no definition of a certain method/property/field" after packaging. What should I do?
 
-## 编辑器下运行正常，打包后调用扩展方法报错(不生成静态代码)
-默认打包后不再使用反射获取扩展函数, 可使用`PUERTS_REFLECT_ALL_EXTENSION`宏来开启反射.(反射速度慢, 建议在任何时候都应该生成静态代码)
+Often, the method/property/field is defined in conditional compilation, and it is only valid under UNITY_EDITOR. In this case, you need to filter out this method/property/field using the Filter tag, and then regenerate the code and package it. ([discussions说明](https://github.com/Tencent/puerts/discussions/806))
 
-## GetComponent<XXX>()在CS为null，但在JS调用却不为null，为什么
-其实那C#对象并不为null，是UnityEngine.Object重载的==操作符。当一个对象被Destroy，未初始化等情况，obj == null返回true；`GetComponent<XXX>()`如果组件不存在，Unity重载==的结果也会让其返回null。但这些C#对象并不为null，可以通过System.Object.ReferenceEquals(null, obj)来验证下。
+#### The extension method reports an error after packaging (static code is not generated)
 
-对应这种情况，可以为UnityEngine.Object写一个扩展方法，需要判空的时候统一用它解决：
-```
-public static bool IsNull(this UnityEngine.Object o) 
-{
-    return o == null;
-}
-```
+By default, reflection is not used to obtain extension functions after packaging. You can use the `PUERTS_REFLECT_ALL_EXTENSION` macro to enable reflection. (Reflection is slow, it is recommended to generate static code at all times)
 
-## source-map-support支持
-安装模块
-```
-npm install source-map-support --save-dev
-```
-然后执行如下代码:
-``` javascript
-puer.registerBuildinModule("path", {
-    dirname(path) {
-        return CS.System.IO.Path.GetDirectoryName(path);
-    },
-    resolve(dir, url) {
-        url = url.replace(/\\/g, "/");
-        while (url.startsWith("../")) {
-            dir = CS.System.IO.Path.GetDirectoryName(dir);
-            url = url.substr(3);
-        }
-        return CS.System.IO.Path.Combine(dir, url);
-    },
-});
-puer.registerBuildinModule("fs", {
-    existsSync(path) {
-        return CS.System.IO.File.Exists(path);
-    },
-    readFileSync(path) {
-        return CS.System.IO.File.ReadAllText(path);
-    },
-});
-(function () {
-    let global = this ?? globalThis;
-    global["Buffer"] = global["Buffer"] ?? {};
-    //使用inline-source-map模式, 需要额外安装buffer模块
-    //global["Buffer"] = global["Buffer"] ?? require("buffer").Buffer;
-})();
-require('source-map-support').install();
-```
-注: source-map-support是nodejs模块, 需要自定义path和fs模块.
-    
-##  webpack打包
-将自定义模块加入external module
-``` js
-module.exports = {
-    // other...
-    /** 忽略编辑的第三方库 */
-    externals: {
-        csharp: "commonjs2 csharp",
-        puerts: "commonjs2 puerts",
-        path: "commonjs2 path",
-        fs: "commonjs2 fs",
-    }
-};
-```
+#### `GetComponent<XXX>()` is null in CS, but not null when called in JS, why?
+
+Actually, the C# object is not null. It is the `==` operator overloaded by UnityEngine.Object. When an object is Destroyed, uninitialized, etc., `obj == null` returns true; `GetComponent<XXX>()` also returns null if the component does not exist, and the result of the

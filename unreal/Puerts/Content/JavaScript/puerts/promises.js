@@ -15,7 +15,7 @@ var global = global || (function () { return this; }());
     const kPromiseResolveAfterResolved = 3;
     
     global.__tgjsSetPromiseRejectCallback(promiseRejectHandler)
-    delete global.__tgjsSetPromiseRejectCallback;
+    global.__tgjsSetPromiseRejectCallback = undefined;
     
     const maybeUnhandledRejection = new WeakMap();
     
@@ -25,7 +25,9 @@ var global = global || (function () { return this; }());
                 maybeUnhandledRejection.set(promise, {
                     reason,
                 }); //maybe unhandledRejection
-                Promise.resolve().then(_ => unhandledRejection(promise, reason));
+                Promise.resolve()
+                    .then(() => Promise.resolve()) // run after all microtasks
+                    .then(_ => unhandledRejection(promise, reason));
                 break;
             case kPromiseHandlerAddedAfterReject:
                 handlerAddedAfterReject(promise);
@@ -65,5 +67,17 @@ var global = global || (function () { return this; }());
             maybeUnhandledRejection.delete(promise);
         }
     }
+    
+    const org_setTimeout = setTimeout;
+    function setTimeout_p(handler, timeout, ...args) {
+        return org_setTimeout(() => handler(...args),  timeout);
+    }
+    global.setTimeout = setTimeout_p;
+    
+    const org_setInterval = setInterval;
+    function setInterval_p(handler, timeout, ...args) {
+        return org_setInterval(() => handler(...args),  timeout);
+    }
+    global.setInterval = setInterval_p;
     
 }(global));
